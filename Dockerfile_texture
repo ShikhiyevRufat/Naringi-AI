@@ -1,0 +1,49 @@
+FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+COPY requirements.txt /app/
+
+RUN pip uninstall -y blinker || true
+
+RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
+
+RUN pip install --no-cache-dir runpod
+
+RUN pip install --no-cache-dir \
+    diffusers>=0.30.0 \
+    transformers>=4.40.0 \
+    accelerate>=0.30.0 \
+    safetensors>=0.4.0 \
+    peft>=0.11.0 \
+    Pillow>=10.0.0
+
+COPY qwenimage/ /app/qwenimage/
+COPY optimization.py /app/
+COPY rp_handler_texture.py /app/rp_handler.py
+
+RUN mkdir -p /root/.cache/huggingface
+
+ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/root/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
+ENV TORCH_HOME=/root/.cache/torch
+ENV CUDA_VISIBLE_DEVICES=0
+
+RUN echo '#!/bin/bash\npython -c "import torch; print(torch.cuda.is_available())"' > /app/healthcheck.sh && \
+    chmod +x /app/healthcheck.sh
+
+CMD ["python", "-u", "/app/rp_handler.py"]
